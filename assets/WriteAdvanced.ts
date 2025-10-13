@@ -11,6 +11,8 @@ export class WriteAdvanced extends Component {
 	graphics: Graphics = null;
 	@property(Graphics)
 	base: Graphics = null;
+	@property(Graphics)
+	bg: Graphics = null;
 
 	@property({ tooltip: "缩放比例" })
 	scale: number = 0.5;
@@ -35,11 +37,14 @@ export class WriteAdvanced extends Component {
 
 	// ==================== 高级笔触参数 ====================
 
-	@property({ tooltip: "最小笔触宽度", range: [1, 20, 0.5] })
-	minStrokeWidth: number = 2;
+	@property({ tooltip: "最小笔触宽度（基准值）", range: [1, 50, 0.5] })
+	minStrokeWidth: number = 20;
 
-	@property({ tooltip: "最大笔触宽度", range: [1, 30, 0.5] })
-	maxStrokeWidth: number = 8;
+	@property({ tooltip: "最大笔触宽度（基准值）", range: [1, 50, 0.5] })
+	maxStrokeWidth: number = 30;
+
+	@property({ tooltip: "笔画宽度跟随缩放" })
+	scaleStrokeWidth: boolean = true;
 
 	// ==================== 速度控制 ====================
 
@@ -125,6 +130,7 @@ export class WriteAdvanced extends Component {
 	}
 
 	protected start() {
+		this.drawGrid();
 		// 加载汉字数据
 		resources.load("hanzi-writer-data/我", JsonAsset, (err, asset: JsonAsset) => {
 			if (err) {
@@ -428,24 +434,8 @@ export class WriteAdvanced extends Component {
 			this.graphics.clear();
 			for (let i = 0; i <= index; i++) {
 				const record = this.strokeHistory[i];
-
-				// 绘制圆形
-				for (const point of record.points) {
-					this.graphics.fillColor = this.strokeColor;
-					this.graphics.circle(point.pos.x, point.pos.y, point.width / 2);
-					this.graphics.fill();
-				}
-
-				// 绘制连接线
-				if (record.points.length > 1) {
-					this.graphics.lineWidth = this.minStrokeWidth;
-					this.graphics.strokeColor = this.strokeColor;
-					this.graphics.moveTo(record.points[0].pos.x, record.points[0].pos.y);
-					for (let j = 1; j < record.points.length; j++) {
-						this.graphics.lineTo(record.points[j].pos.x, record.points[j].pos.y);
-					}
-					this.graphics.stroke();
-				}
+				// 使用平滑绘制方法
+				this.drawSmoothStroke(record.points);
 			}
 
 			console.log(`🎬 回放进度: ${index + 1}/${this.strokeHistory.length}`);
@@ -569,32 +559,48 @@ export class WriteAdvanced extends Component {
 	}
 
 	/**
+	 * 获取应用缩放后的最小笔触宽度
+	 */
+	private getScaledMinWidth(): number {
+		return this.scaleStrokeWidth ? this.minStrokeWidth * this.scale : this.minStrokeWidth;
+	}
+
+	/**
 	 * 计算当前进度对应的笔触宽度（模拟笔压）
 	 */
 	getStrokeWidthAtProgress(progress: number): number {
+		let width: number;
+
 		if (!this.useVariableWidth) {
-			return this.minStrokeWidth;
+			width = this.minStrokeWidth;
+		} else {
+			const { startStrokeRatio, endStrokeRatio, minStrokeWidth, maxStrokeWidth } = this;
+
+			// 起笔阶段：从最小宽度渐增到最大宽度
+			if (progress < startStrokeRatio) {
+				const t = progress / startStrokeRatio;
+				const eased = this.easeOutQuad(t);
+				width = minStrokeWidth + (maxStrokeWidth - minStrokeWidth) * eased;
+			}
+			// 收笔阶段：从最大宽度渐减到最小宽度
+			else if (progress > 1 - endStrokeRatio) {
+				const t = (progress - (1 - endStrokeRatio)) / endStrokeRatio;
+				const eased = this.easeInQuad(t);
+				width = maxStrokeWidth - (maxStrokeWidth - minStrokeWidth) * eased;
+			}
+			// 行笔阶段：保持最大宽度，加入轻微波动
+			else {
+				const wobble = Math.sin(progress * Math.PI * 4) * 0.5; // 轻微抖动
+				width = maxStrokeWidth + wobble;
+			}
 		}
 
-		const { startStrokeRatio, endStrokeRatio, minStrokeWidth, maxStrokeWidth } = this;
-
-		// 起笔阶段：从最小宽度渐增到最大宽度
-		if (progress < startStrokeRatio) {
-			const t = progress / startStrokeRatio;
-			const eased = this.easeOutQuad(t);
-			return minStrokeWidth + (maxStrokeWidth - minStrokeWidth) * eased;
+		// 如果启用了宽度缩放，应用缩放比例
+		if (this.scaleStrokeWidth) {
+			width *= this.scale;
 		}
 
-		// 收笔阶段：从最大宽度渐减到最小宽度
-		if (progress > 1 - endStrokeRatio) {
-			const t = (progress - (1 - endStrokeRatio)) / endStrokeRatio;
-			const eased = this.easeInQuad(t);
-			return maxStrokeWidth - (maxStrokeWidth - minStrokeWidth) * eased;
-		}
-
-		// 行笔阶段：保持最大宽度，加入轻微波动
-		const wobble = Math.sin(progress * Math.PI * 4) * 0.5; // 轻微抖动
-		return maxStrokeWidth + wobble;
+		return width;
 	}
 
 	/**
@@ -661,6 +667,42 @@ export class WriteAdvanced extends Component {
 	}
 
 	/**
+	 * 平滑绘制笔画（填充点之间的间隙）
+	 */
+	private drawSmoothStroke(points: Array<{ pos: Vec2; width: number }>) {
+		if (points.length === 0) return;
+
+		this.graphics.fillColor = this.strokeColor;
+
+		// 绘制第一个点
+		this.graphics.circle(points[0].pos.x, points[0].pos.y, points[0].width / 2);
+		this.graphics.fill();
+
+		// 在相邻点之间插值绘制
+		for (let i = 1; i < points.length; i++) {
+			const p1 = points[i - 1];
+			const p2 = points[i];
+
+			const distance = Vec2.distance(p1.pos, p2.pos);
+			const avgWidth = (p1.width + p2.width) / 2;
+
+			// 计算需要插值的数量：确保圆形之间有足够的重叠
+			const numSteps = Math.max(1, Math.ceil(distance / (avgWidth * 0.5)));
+
+			// 在两点之间插值
+			for (let step = 0; step <= numSteps; step++) {
+				const t = step / numSteps;
+				const x = p1.pos.x + (p2.pos.x - p1.pos.x) * t;
+				const y = p1.pos.y + (p2.pos.y - p1.pos.y) * t;
+				const width = p1.width + (p2.width - p1.width) * t;
+
+				this.graphics.circle(x, y, width / 2);
+				this.graphics.fill();
+			}
+		}
+	}
+
+	/**
 	 * 绘制变宽度笔触（包含历史记录）
 	 */
 	drawVariableWidthStroke() {
@@ -671,26 +713,10 @@ export class WriteAdvanced extends Component {
 		this.drawHistoryStrokes();
 
 		// 再绘制当前正在进行的笔画
-		if (this.strokePoints.length < 2) return;
+		if (this.strokePoints.length < 1) return;
 
-		// 方法1: 使用多个圆形填充（适合变宽度）
-		for (let i = 0; i < this.strokePoints.length; i++) {
-			const point = this.strokePoints[i];
-			this.graphics.fillColor = this.strokeColor;
-			this.graphics.circle(point.pos.x, point.pos.y, point.width / 2);
-			this.graphics.fill();
-		}
-
-		// 方法2: 绘制连接线（可选）
-		if (this.strokePoints.length > 1) {
-			this.graphics.lineWidth = this.minStrokeWidth;
-			this.graphics.strokeColor = this.strokeColor;
-			this.graphics.moveTo(this.strokePoints[0].pos.x, this.strokePoints[0].pos.y);
-			for (let i = 1; i < this.strokePoints.length; i++) {
-				this.graphics.lineTo(this.strokePoints[i].pos.x, this.strokePoints[i].pos.y);
-			}
-			this.graphics.stroke();
-		}
+		// 绘制笔画点，并在相邻点之间插值填充间隙
+		this.drawSmoothStroke(this.strokePoints);
 
 		// 调试：显示轨迹点
 		if (this.showDebugPoints) {
@@ -718,24 +744,49 @@ export class WriteAdvanced extends Component {
 	 */
 	drawHistoryStrokes() {
 		for (const record of this.strokeHistory) {
-			// 绘制每一笔的圆形
-			for (const point of record.points) {
-				this.graphics.fillColor = this.strokeColor;
-				this.graphics.circle(point.pos.x, point.pos.y, point.width / 2);
-				this.graphics.fill();
-			}
-
-			// 绘制连接线
-			if (record.points.length > 1) {
-				this.graphics.lineWidth = this.minStrokeWidth;
-				this.graphics.strokeColor = this.strokeColor;
-				this.graphics.moveTo(record.points[0].pos.x, record.points[0].pos.y);
-				for (let i = 1; i < record.points.length; i++) {
-					this.graphics.lineTo(record.points[i].pos.x, record.points[i].pos.y);
-				}
-				this.graphics.stroke();
-			}
+			// 使用平滑绘制方法
+			this.drawSmoothStroke(record.points);
 		}
+	}
+
+	/**
+	 * 绘制田字格
+	 */
+	drawGrid() {
+		if (!this.bg) {
+			console.warn("⚠️ bg Graphics 节点未绑定！");
+			return;
+		}
+
+		this.bg.clear();
+		this.bg.lineWidth = 2;
+
+		// 计算田字格的大小
+		let gridSize: number;
+
+		if (this.bounds && this.autoCenter) {
+			// 根据实际汉字边界框大小来确定田字格大小
+			const width = this.bounds.maxX - this.bounds.minX;
+			const height = this.bounds.maxY - this.bounds.minY;
+			gridSize = Math.max(width, height) * this.scale * 1.2; // 留出20%的边距
+		} else {
+			// 使用标准 SVG 画布大小
+			gridSize = this.SVG_SIZE * this.scale;
+		}
+
+		const halfSize = gridSize / 2;
+
+		this.bg.rect(-halfSize, -halfSize, gridSize, gridSize);
+		// 绘制对角线
+		this.bg.moveTo(-halfSize, -halfSize);
+		this.bg.lineTo(halfSize, halfSize);
+		this.bg.moveTo(-halfSize, halfSize);
+		this.bg.lineTo(halfSize, -halfSize);
+
+		// 统一绘制所有线条
+		this.bg.stroke();
+
+		console.log(`📐 田字格大小: ${gridSize.toFixed(1)}px`);
 	}
 
 	/**
@@ -795,9 +846,10 @@ export class WriteAdvanced extends Component {
 				targetDistance = Math.max(this.minPointDistance, Math.min(this.maxPointDistance, targetDistance));
 			}
 
-			// 判断是否应该添加新点
+			// 使用更小的最小距离来避免刚添加关键点后又添加太近的普通点造成错位
+			const minAllowedDistance = Math.max(targetDistance, this.getScaledMinWidth() * 0.3);
 			const shouldAddPoint =
-				this.strokePoints.length === 0 || Vec2.distance(point, this.strokePoints[this.strokePoints.length - 1].pos) >= targetDistance;
+				this.strokePoints.length === 0 || Vec2.distance(point, this.strokePoints[this.strokePoints.length - 1].pos) >= minAllowedDistance;
 
 			if (shouldAddPoint) {
 				this.strokePoints.push({ pos: point, width });
@@ -860,6 +912,10 @@ export class WriteAdvanced extends Component {
 
 		console.log("\n✨ 笔触效果:");
 		console.log(`  - 变宽度笔触: ${this.useVariableWidth ? "启用" : "禁用"}`);
+		console.log(`  - 宽度跟随缩放: ${this.scaleStrokeWidth ? "启用" : "禁用"}`);
+		if (this.scaleStrokeWidth) {
+			console.log(`    * 实际宽度: ${this.getScaledMinWidth().toFixed(1)} ~ ${(this.maxStrokeWidth * this.scale).toFixed(1)}px`);
+		}
 		console.log(`  - 起笔阶段: ${(this.startStrokeRatio * 100).toFixed(0)}%`);
 		console.log(`  - 收笔阶段: ${(this.endStrokeRatio * 100).toFixed(0)}%`);
 		console.log("======================\n");
