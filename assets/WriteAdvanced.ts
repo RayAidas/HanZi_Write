@@ -9,15 +9,14 @@ const { ccclass, property } = _decorator;
 export class WriteAdvanced extends Component {
 	@property(Graphics)
 	graphics: Graphics = null;
+	@property(Graphics)
+	base: Graphics = null;
 
 	@property({ tooltip: "缩放比例" })
 	scale: number = 0.5;
 
-	@property({ tooltip: "X 偏移" })
-	offsetX: number = 0;
-
-	@property({ tooltip: "Y 偏移" })
-	offsetY: number = 0;
+	@property({ tooltip: "自动居中显示" })
+	autoCenter: boolean = true;
 
 	@property({ tooltip: "每笔间隔时间（秒）" })
 	strokeDelay: number = 0.5;
@@ -27,6 +26,12 @@ export class WriteAdvanced extends Component {
 
 	@property({ tooltip: "笔画颜色" })
 	strokeColor: Color = Color.WHITE;
+
+	@property({ tooltip: "临摹原型颜色" })
+	baseColor: Color = new Color(100, 100, 100, 80);
+
+	@property({ tooltip: "显示临摹原型" })
+	showBase: boolean = true;
 
 	// ==================== 高级笔触参数 ====================
 
@@ -56,13 +61,13 @@ export class WriteAdvanced extends Component {
 	// ==================== 点密度控制 ====================
 
 	@property({ tooltip: "点采样密度（像素/点，越小越密）", range: [0.5, 20, 0.5] })
-	pointDensity: number = 8;
+	pointDensity: number = 5;
 
 	@property({ tooltip: "最小点间距（像素）", range: [0.5, 10, 0.5] })
-	minPointDistance: number = 2;
+	minPointDistance: number = 1;
 
 	@property({ tooltip: "最大点间距（像素）", range: [5, 50, 1] })
-	maxPointDistance: number = 15;
+	maxPointDistance: number = 12;
 
 	@property({ tooltip: "根据速度调整点密度" })
 	adaptivePointDensity: boolean = true;
@@ -81,7 +86,16 @@ export class WriteAdvanced extends Component {
 	@property({ tooltip: "显示笔触轨迹点（调试用）" })
 	showDebugPoints: boolean = false;
 
+	@property({ tooltip: "显示 Median 关键点（调试用）" })
+	showMedianPoints: boolean = false;
+
 	// ==================== 私有变量 ====================
+
+	// HanziWriter的标准viewBox大小
+	private readonly SVG_SIZE: number = 1024;
+
+	// 存储笔画的边界框
+	private bounds: { minX: number; minY: number; maxX: number; maxY: number } = null;
 
 	private charData: any = null;
 	private currentStrokeIndex: number = 0;
@@ -103,6 +117,11 @@ export class WriteAdvanced extends Component {
 		this.graphics.lineWidth = this.minStrokeWidth;
 		this.graphics.strokeColor = this.strokeColor;
 		this.graphics.fillColor = this.strokeColor;
+
+		if (this.base) {
+			this.base.fillColor = this.baseColor;
+			this.base.strokeColor = this.baseColor;
+		}
 	}
 
 	protected start() {
@@ -116,10 +135,132 @@ export class WriteAdvanced extends Component {
 			this.charData = asset.json;
 			console.log("加载汉字数据成功:", this.charData);
 
+			// 如果启用自动居中，计算边界框
+			if (this.autoCenter) {
+				this.calculateBounds();
+			}
+
+			// 绘制临摹原型
+			if (this.base && this.showBase) {
+				this.drawBaseCharacter();
+			}
+
 			if (this.autoPlay) {
 				this.playAnimation();
 			}
 		});
+	}
+
+	/**
+	 * 绘制临摹原型（完整的汉字轮廓）
+	 */
+	drawBaseCharacter() {
+		if (!this.base || !this.charData) {
+			return;
+		}
+
+		this.base.clear();
+		this.base.fillColor = this.baseColor;
+
+		// 绘制所有笔画
+		for (const stroke of this.charData.strokes) {
+			this.drawSVGPath(stroke, this.base);
+		}
+
+		console.log("📝 已绘制临摹原型");
+	}
+
+	/**
+	 * 解析并绘制 SVG 路径
+	 */
+	private drawSVGPath(pathData: string, graphics: Graphics) {
+		const commands = this.parseSVGPath(pathData);
+		let currentX = 0;
+		let currentY = 0;
+		let startX = 0;
+		let startY = 0;
+
+		for (const cmd of commands) {
+			switch (cmd.type) {
+				case "M": // MoveTo
+					currentX = cmd.x;
+					currentY = cmd.y;
+					startX = currentX;
+					startY = currentY;
+					graphics.moveTo(this.transformX(currentX), this.transformY(currentY));
+					break;
+
+				case "L": // LineTo
+					currentX = cmd.x;
+					currentY = cmd.y;
+					graphics.lineTo(this.transformX(currentX), this.transformY(currentY));
+					break;
+
+				case "Q": // QuadraticCurveTo
+					graphics.quadraticCurveTo(this.transformX(cmd.x1), this.transformY(cmd.y1), this.transformX(cmd.x), this.transformY(cmd.y));
+					currentX = cmd.x;
+					currentY = cmd.y;
+					break;
+
+				case "C": // BezierCurveTo
+					graphics.bezierCurveTo(
+						this.transformX(cmd.x1),
+						this.transformY(cmd.y1),
+						this.transformX(cmd.x2),
+						this.transformY(cmd.y2),
+						this.transformX(cmd.x),
+						this.transformY(cmd.y)
+					);
+					currentX = cmd.x;
+					currentY = cmd.y;
+					break;
+
+				case "Z": // ClosePath
+					graphics.lineTo(this.transformX(startX), this.transformY(startY));
+					graphics.close();
+					break;
+			}
+		}
+
+		graphics.fill();
+	}
+
+	/**
+	 * 解析 SVG 路径字符串
+	 */
+	private parseSVGPath(pathData: string): Array<any> {
+		const commands: Array<any> = [];
+		const regex = /([MLQCZ])([^MLQCZ]*)/gi;
+		let match;
+
+		while ((match = regex.exec(pathData)) !== null) {
+			const type = match[1].toUpperCase();
+			const args = match[2]
+				.trim()
+				.split(/[\s,]+/)
+				.filter((s) => s.length > 0)
+				.map(parseFloat);
+
+			switch (type) {
+				case "M":
+					commands.push({ type: "M", x: args[0], y: args[1] });
+					break;
+				case "L":
+					commands.push({ type: "L", x: args[0], y: args[1] });
+					break;
+				case "Q":
+					commands.push({ type: "Q", x1: args[0], y1: args[1], x: args[2], y: args[3] });
+					break;
+				case "C":
+					commands.push({ type: "C", x1: args[0], y1: args[1], x2: args[2], y2: args[3], x: args[4], y: args[5] });
+					break;
+				case "Z":
+					commands.push({ type: "Z" });
+					break;
+			}
+		}
+
+		return commands;
 	}
 
 	/**
@@ -148,6 +289,21 @@ export class WriteAdvanced extends Component {
 		this.strokeHistory = [];
 		this.graphics.clear();
 		console.log("✨ 已清除所有书写记录");
+	}
+
+	/**
+	 * 切换临摹原型显示
+	 */
+	toggleBase() {
+		this.showBase = !this.showBase;
+		if (this.base) {
+			if (this.showBase) {
+				this.drawBaseCharacter();
+			} else {
+				this.base.clear();
+			}
+		}
+		console.log(`👁️ 临摹原型: ${this.showBase ? "显示" : "隐藏"}`);
 	}
 
 	/**
@@ -204,7 +360,7 @@ export class WriteAdvanced extends Component {
 	 */
 	exportHistoryAsJSON(): string {
 		const exportData = {
-			character: "我", // 可以改为动态获取
+			character: this.charData?.character || "未知",
 			totalStrokes: this.strokeHistory.length,
 			records: this.strokeHistory.map((record) => ({
 				strokeIndex: record.strokeIndex,
@@ -342,6 +498,36 @@ export class WriteAdvanced extends Component {
 	}
 
 	/**
+	 * 计算所有笔画的边界框
+	 */
+	private calculateBounds() {
+		if (!this.charData || !this.charData.medians) {
+			return;
+		}
+
+		let minX = Infinity;
+		let minY = Infinity;
+		let maxX = -Infinity;
+		let maxY = -Infinity;
+
+		// 遍历所有笔画的 medians 数据
+		for (const median of this.charData.medians) {
+			for (const point of median) {
+				const x = point[0];
+				const y = point[1];
+
+				if (x < minX) minX = x;
+				if (x > maxX) maxX = x;
+				if (y < minY) minY = y;
+				if (y > maxY) maxY = y;
+			}
+		}
+
+		this.bounds = { minX, minY, maxX, maxY };
+		console.log("📐 边界框:", this.bounds);
+	}
+
+	/**
 	 * 计算 medians 路径长度
 	 */
 	calculateMediansLength(medians: number[][]): number {
@@ -412,6 +598,40 @@ export class WriteAdvanced extends Component {
 	}
 
 	/**
+	 * 将SVG的X坐标转换为Cocos坐标系
+	 */
+	private transformX(x: number): number {
+		let centerX: number;
+
+		if (this.bounds && this.autoCenter) {
+			// 使用实际笔画边界框的中心
+			centerX = (this.bounds.minX + this.bounds.maxX) / 2;
+		} else {
+			// 使用SVG画布的中心
+			centerX = this.SVG_SIZE / 2;
+		}
+
+		return (x - centerX) * this.scale;
+	}
+
+	/**
+	 * 将SVG的Y坐标转换为Cocos坐标系
+	 */
+	private transformY(y: number): number {
+		let centerY: number;
+
+		if (this.bounds && this.autoCenter) {
+			// 使用实际笔画边界框的中心
+			centerY = (this.bounds.minY + this.bounds.maxY) / 2;
+		} else {
+			// 使用SVG画布的中心
+			centerY = this.SVG_SIZE / 2;
+		}
+
+		return (y - centerY) * this.scale;
+	}
+
+	/**
 	 * 根据进度获取路径上的点
 	 */
 	getPointAtProgress(medians: number[][], progress: number): Vec2 {
@@ -429,7 +649,7 @@ export class WriteAdvanced extends Component {
 				const ratio = (targetLength - accumulatedLength) / segmentLength;
 				const x = x0 + (x1 - x0) * ratio;
 				const y = y0 + (y1 - y0) * ratio;
-				return new Vec2(x * this.scale + this.offsetX, y * this.scale + this.offsetY);
+				return new Vec2(this.transformX(x), this.transformY(y));
 			}
 
 			accumulatedLength += segmentLength;
@@ -437,7 +657,7 @@ export class WriteAdvanced extends Component {
 
 		// 末尾点
 		const lastPoint = medians[medians.length - 1];
-		return new Vec2(lastPoint[0] * this.scale + this.offsetX, lastPoint[1] * this.scale + this.offsetY);
+		return new Vec2(this.transformX(lastPoint[0]), this.transformY(lastPoint[1]));
 	}
 
 	/**
@@ -479,6 +699,17 @@ export class WriteAdvanced extends Component {
 				this.graphics.circle(point.pos.x, point.pos.y, 3);
 				this.graphics.fill();
 			});
+		}
+
+		// 调试：显示 Median 关键点（蓝色）
+		if (this.showMedianPoints && this.currentMedians) {
+			for (const median of this.currentMedians) {
+				const x = this.transformX(median[0]);
+				const y = this.transformY(median[1]);
+				this.graphics.fillColor = Color.BLUE;
+				this.graphics.circle(x, y, 4);
+				this.graphics.fill();
+			}
 		}
 	}
 
@@ -608,7 +839,8 @@ export class WriteAdvanced extends Component {
 		console.log("\n⚙️ ===== 当前配置 =====");
 		console.log("📏 尺寸参数:");
 		console.log(`  - 缩放: ${this.scale}`);
-		console.log(`  - 偏移: (${this.offsetX}, ${this.offsetY})`);
+		console.log(`  - 自动居中: ${this.autoCenter ? "启用" : "禁用"}`);
+		console.log(`  - 临摹原型: ${this.showBase ? "显示" : "隐藏"}`);
 		console.log(`  - 笔触宽度: ${this.minStrokeWidth} ~ ${this.maxStrokeWidth}px`);
 
 		console.log("\n🏃 速度参数:");

@@ -17,7 +17,7 @@
 
 1. 访问 [hanzi-writer-data](https://github.com/chanind/hanzi-writer-data) 仓库
 2. 下载所需的汉字数据文件
-3. 将下载的字库资源放置在 `assets/resources/` 目录下
+3. 将下载的data文件夹放入 `assets/resources/` 目录下,并改名为hanzi-writer-data
 
 ### 字库目录结构
 
