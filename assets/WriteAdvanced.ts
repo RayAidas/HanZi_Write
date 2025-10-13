@@ -172,8 +172,6 @@ export class WriteAdvanced extends Component {
 		for (const stroke of this.charData.strokes) {
 			this.drawSVGPath(stroke, this.base);
 		}
-
-		console.log("📝 已绘制临摹原型");
 	}
 
 	/**
@@ -288,28 +286,18 @@ export class WriteAdvanced extends Component {
 		this.drawNextStroke();
 	}
 
-	/**
-	 * 清除所有书写记录
-	 */
+	/** 清除所有书写记录 */
 	clearHistory() {
 		this.strokeHistory = [];
 		this.graphics.clear();
-		console.log("✨ 已清除所有书写记录");
 	}
 
-	/**
-	 * 切换临摹原型显示
-	 */
+	/** 切换临摹原型显示 */
 	toggleBase() {
 		this.showBase = !this.showBase;
 		if (this.base) {
-			if (this.showBase) {
-				this.drawBaseCharacter();
-			} else {
-				this.base.clear();
-			}
+			this.showBase ? this.drawBaseCharacter() : this.base.clear();
 		}
-		console.log(`👁️ 临摹原型: ${this.showBase ? "显示" : "隐藏"}`);
 	}
 
 	/**
@@ -338,78 +326,50 @@ export class WriteAdvanced extends Component {
 		};
 
 		this.strokeHistory.push(record);
-
-		console.log(`📝 第 ${this.currentStrokeIndex + 1} 笔已保存，共 ${pointsCopy.length} 个点`);
-
-		// 清空当前笔画点（准备绘制下一笔）
 		this.strokePoints = [];
 	}
 
-	/**
-	 * 打印历史记录摘要
-	 */
+	/** 打印历史记录摘要 */
 	private printHistory() {
-		console.log("\n📚 ===== 书写历史记录 =====");
-		this.strokeHistory.forEach((record, index) => {
-			const duration = index > 0 ? ((record.timestamp - this.strokeHistory[index - 1].timestamp) / 1000).toFixed(2) : "0.00";
-			console.log(
-				`笔画 ${record.strokeIndex + 1}: ${record.points.length} 点, ` +
-					`耗时 ${duration}s, ` +
-					`时间戳 ${new Date(record.timestamp).toLocaleTimeString()}`
-			);
-		});
-		console.log("========================\n");
+		console.log("\n📚 书写历史:", this.strokeHistory.map((r, i) => `笔画${r.strokeIndex + 1}: ${r.points.length}点`).join(", "));
 	}
 
-	/**
-	 * 导出书写记录为 JSON
-	 */
+	/** 导出书写记录为 JSON */
 	exportHistoryAsJSON(): string {
-		const exportData = {
-			character: this.charData?.character || "未知",
-			totalStrokes: this.strokeHistory.length,
-			records: this.strokeHistory.map((record) => ({
-				strokeIndex: record.strokeIndex,
-				pointCount: record.points.length,
-				timestamp: record.timestamp,
-				// 为了减少数据量，只保存关键点
-				points: record.points.map((p) => ({
-					x: Math.round(p.pos.x * 10) / 10,
-					y: Math.round(p.pos.y * 10) / 10,
-					w: Math.round(p.width * 10) / 10,
+		return JSON.stringify(
+			{
+				character: this.charData?.character || "未知",
+				totalStrokes: this.strokeHistory.length,
+				records: this.strokeHistory.map((r) => ({
+					strokeIndex: r.strokeIndex,
+					pointCount: r.points.length,
+					timestamp: r.timestamp,
+					points: r.points.map((p) => ({
+						x: Math.round(p.pos.x * 10) / 10,
+						y: Math.round(p.pos.y * 10) / 10,
+						w: Math.round(p.width * 10) / 10,
+					})),
 				})),
-			})),
-		};
-
-		const json = JSON.stringify(exportData, null, 2);
-		console.log("📤 导出书写记录:", json);
-		return json;
+			},
+			null,
+			2
+		);
 	}
 
-	/**
-	 * 从 JSON 导入书写记录
-	 */
+	/** 从 JSON 导入书写记录 */
 	importHistoryFromJSON(json: string): boolean {
 		try {
 			const data = JSON.parse(json);
-
-			this.strokeHistory = data.records.map((record: any) => ({
-				strokeIndex: record.strokeIndex,
-				timestamp: record.timestamp,
-				points: record.points.map((p: any) => ({
-					pos: new Vec2(p.x, p.y),
-					width: p.w,
-				})),
+			this.strokeHistory = data.records.map((r: any) => ({
+				strokeIndex: r.strokeIndex,
+				timestamp: r.timestamp,
+				points: r.points.map((p: any) => ({ pos: new Vec2(p.x, p.y), width: p.w })),
 			}));
-
-			// 重新绘制
 			this.graphics.clear();
 			this.drawHistoryStrokes();
-
-			console.log(`📥 成功导入 ${this.strokeHistory.length} 笔书写记录`);
 			return true;
 		} catch (error) {
-			console.error("❌ 导入失败:", error);
+			console.error("导入失败:", error);
 			return false;
 		}
 	}
@@ -479,11 +439,9 @@ export class WriteAdvanced extends Component {
 		}
 
 		console.log(
-			`📝 笔画 ${this.currentStrokeIndex + 1}/${this.charData.strokes.length}:`,
-			`长度=${strokeLength.toFixed(1)}px`,
-			`速度=${baseSpeed.toFixed(0)}px/s`,
-			`时长=${this.currentStrokeDuration.toFixed(2)}s`,
-			`点密度=${this.pointDensity.toFixed(1)}px/点`
+			`📝 笔画${this.currentStrokeIndex + 1}/${this.charData.strokes.length}: ${strokeLength.toFixed(0)}px ${baseSpeed.toFixed(
+				0
+			)}px/s ${this.currentStrokeDuration.toFixed(2)}s`
 		);
 	}
 
@@ -514,7 +472,6 @@ export class WriteAdvanced extends Component {
 		}
 
 		this.bounds = { minX, minY, maxX, maxY };
-		console.log("📐 边界框:", this.bounds);
 	}
 
 	/**
@@ -530,31 +487,18 @@ export class WriteAdvanced extends Component {
 		return length;
 	}
 
-	/**
-	 * 计算当前进度对应的速度倍率（速度缓动）
-	 */
+	/** 计算当前进度对应的速度倍率 */
 	getSpeedMultiplierAtProgress(progress: number): number {
-		if (!this.useSpeedEasing) {
-			return 1.0;
+		if (!this.useSpeedEasing) return 1.0;
+
+		if (progress < this.startStrokeRatio) {
+			const t = progress / this.startStrokeRatio;
+			return this.startSpeedRatio + (1.0 - this.startSpeedRatio) * this.easeOutQuad(t);
 		}
-
-		const { startStrokeRatio, endStrokeRatio, startSpeedRatio, endSpeedRatio } = this;
-
-		// 起笔阶段：慢速
-		if (progress < startStrokeRatio) {
-			const t = progress / startStrokeRatio;
-			// 从 startSpeedRatio 渐变到 1.0
-			return startSpeedRatio + (1.0 - startSpeedRatio) * this.easeOutQuad(t);
+		if (progress > 1 - this.endStrokeRatio) {
+			const t = (progress - (1 - this.endStrokeRatio)) / this.endStrokeRatio;
+			return 1.0 - (1.0 - this.endSpeedRatio) * this.easeInQuad(t);
 		}
-
-		// 收笔阶段：减速
-		if (progress > 1 - endStrokeRatio) {
-			const t = (progress - (1 - endStrokeRatio)) / endStrokeRatio;
-			// 从 1.0 渐变到 endSpeedRatio
-			return 1.0 - (1.0 - endSpeedRatio) * this.easeInQuad(t);
-		}
-
-		// 行笔阶段：正常速度
 		return 1.0;
 	}
 
@@ -565,75 +509,34 @@ export class WriteAdvanced extends Component {
 		return this.scaleStrokeWidth ? this.minStrokeWidth * this.scale : this.minStrokeWidth;
 	}
 
-	/**
-	 * 计算当前进度对应的笔触宽度（模拟笔压）
-	 */
+	/** 计算当前进度对应的笔触宽度 */
 	getStrokeWidthAtProgress(progress: number): number {
-		let width: number;
+		let width = this.minStrokeWidth;
 
-		if (!this.useVariableWidth) {
-			width = this.minStrokeWidth;
-		} else {
-			const { startStrokeRatio, endStrokeRatio, minStrokeWidth, maxStrokeWidth } = this;
-
-			// 起笔阶段：从最小宽度渐增到最大宽度
-			if (progress < startStrokeRatio) {
-				const t = progress / startStrokeRatio;
-				const eased = this.easeOutQuad(t);
-				width = minStrokeWidth + (maxStrokeWidth - minStrokeWidth) * eased;
-			}
-			// 收笔阶段：从最大宽度渐减到最小宽度
-			else if (progress > 1 - endStrokeRatio) {
-				const t = (progress - (1 - endStrokeRatio)) / endStrokeRatio;
-				const eased = this.easeInQuad(t);
-				width = maxStrokeWidth - (maxStrokeWidth - minStrokeWidth) * eased;
-			}
-			// 行笔阶段：保持最大宽度，加入轻微波动
-			else {
-				const wobble = Math.sin(progress * Math.PI * 4) * 0.5; // 轻微抖动
-				width = maxStrokeWidth + wobble;
+		if (this.useVariableWidth) {
+			if (progress < this.startStrokeRatio) {
+				const t = this.easeOutQuad(progress / this.startStrokeRatio);
+				width = this.minStrokeWidth + (this.maxStrokeWidth - this.minStrokeWidth) * t;
+			} else if (progress > 1 - this.endStrokeRatio) {
+				const t = this.easeInQuad((progress - (1 - this.endStrokeRatio)) / this.endStrokeRatio);
+				width = this.maxStrokeWidth - (this.maxStrokeWidth - this.minStrokeWidth) * t;
+			} else {
+				width = this.maxStrokeWidth + Math.sin(progress * Math.PI * 4) * 0.5;
 			}
 		}
 
-		// 如果启用了宽度缩放，应用缩放比例
-		if (this.scaleStrokeWidth) {
-			width *= this.scale;
-		}
-
-		return width;
+		return this.scaleStrokeWidth ? width * this.scale : width;
 	}
 
-	/**
-	 * 将SVG的X坐标转换为Cocos坐标系
-	 */
+	/** 将SVG的X坐标转换为Cocos坐标系 */
 	private transformX(x: number): number {
-		let centerX: number;
-
-		if (this.bounds && this.autoCenter) {
-			// 使用实际笔画边界框的中心
-			centerX = (this.bounds.minX + this.bounds.maxX) / 2;
-		} else {
-			// 使用SVG画布的中心
-			centerX = this.SVG_SIZE / 2;
-		}
-
+		const centerX = this.bounds && this.autoCenter ? (this.bounds.minX + this.bounds.maxX) / 2 : this.SVG_SIZE / 2;
 		return (x - centerX) * this.scale;
 	}
 
-	/**
-	 * 将SVG的Y坐标转换为Cocos坐标系
-	 */
+	/** 将SVG的Y坐标转换为Cocos坐标系 */
 	private transformY(y: number): number {
-		let centerY: number;
-
-		if (this.bounds && this.autoCenter) {
-			// 使用实际笔画边界框的中心
-			centerY = (this.bounds.minY + this.bounds.maxY) / 2;
-		} else {
-			// 使用SVG画布的中心
-			centerY = this.SVG_SIZE / 2;
-		}
-
+		const centerY = this.bounds && this.autoCenter ? (this.bounds.minY + this.bounds.maxY) / 2 : this.SVG_SIZE / 2;
 		return (y - centerY) * this.scale;
 	}
 
@@ -783,10 +686,7 @@ export class WriteAdvanced extends Component {
 		this.bg.moveTo(-halfSize, halfSize);
 		this.bg.lineTo(halfSize, -halfSize);
 
-		// 统一绘制所有线条
 		this.bg.stroke();
-
-		console.log(`📐 田字格大小: ${gridSize.toFixed(1)}px`);
 	}
 
 	/**
@@ -860,170 +760,70 @@ export class WriteAdvanced extends Component {
 	}
 
 	// ==================== 缓动函数 ====================
-
-	/**
-	 * 二次缓出：加速
-	 */
 	easeOutQuad(t: number): number {
 		return t * (2 - t);
 	}
-
-	/**
-	 * 二次缓入：减速
-	 */
 	easeInQuad(t: number): number {
 		return t * t;
 	}
-
-	/**
-	 * Cos 缓动（hanzi-writer 使用）
-	 */
 	easeCos(t: number): number {
 		return -Math.cos(t * Math.PI) / 2 + 0.5;
 	}
 
 	// ==================== 调试和预设 ====================
 
-	/**
-	 * 打印当前配置信息
-	 */
+	/** 打印当前配置信息 */
 	printConfig() {
-		console.log("\n⚙️ ===== 当前配置 =====");
-		console.log("📏 尺寸参数:");
-		console.log(`  - 缩放: ${this.scale}`);
-		console.log(`  - 自动居中: ${this.autoCenter ? "启用" : "禁用"}`);
-		console.log(`  - 临摹原型: ${this.showBase ? "显示" : "隐藏"}`);
-		console.log(`  - 笔触宽度: ${this.minStrokeWidth} ~ ${this.maxStrokeWidth}px`);
-
-		console.log("\n🏃 速度参数:");
-		console.log(`  - 基础速度: ${this.strokeSpeed}px/s`);
-		console.log(`  - 速度倍率: ${this.speedMultiplier}x`);
-		console.log(`  - 实际速度: ${(this.strokeSpeed * this.speedMultiplier).toFixed(0)}px/s`);
-		console.log(`  - 速度缓动: ${this.useSpeedEasing ? "启用" : "禁用"}`);
-		if (this.useSpeedEasing) {
-			console.log(`    * 起笔速度: ${(this.startSpeedRatio * 100).toFixed(0)}%`);
-			console.log(`    * 收笔速度: ${(this.endSpeedRatio * 100).toFixed(0)}%`);
-		}
-
-		console.log("\n🎯 点密度参数:");
-		console.log(`  - 基础点密度: ${this.pointDensity}px/点`);
-		console.log(`  - 点间距范围: ${this.minPointDistance} ~ ${this.maxPointDistance}px`);
-		console.log(`  - 自适应密度: ${this.adaptivePointDensity ? "启用" : "禁用"}`);
-
-		console.log("\n✨ 笔触效果:");
-		console.log(`  - 变宽度笔触: ${this.useVariableWidth ? "启用" : "禁用"}`);
-		console.log(`  - 宽度跟随缩放: ${this.scaleStrokeWidth ? "启用" : "禁用"}`);
-		if (this.scaleStrokeWidth) {
-			console.log(`    * 实际宽度: ${this.getScaledMinWidth().toFixed(1)} ~ ${(this.maxStrokeWidth * this.scale).toFixed(1)}px`);
-		}
-		console.log(`  - 起笔阶段: ${(this.startStrokeRatio * 100).toFixed(0)}%`);
-		console.log(`  - 收笔阶段: ${(this.endStrokeRatio * 100).toFixed(0)}%`);
-		console.log("======================\n");
+		console.log(`⚙️ 配置: 缩放${this.scale} 笔触${this.minStrokeWidth}~${this.maxStrokeWidth} 速度${this.strokeSpeed}px/s 点密度${this.pointDensity}`);
 	}
 
 	/**
 	 * 应用预设配置
 	 */
 	applyPreset(presetName: string) {
-		switch (presetName) {
-			case "fast": // 快速书写
-				this.strokeSpeed = 500;
-				this.speedMultiplier = 1.5;
-				this.pointDensity = 12;
-				this.useSpeedEasing = false;
-				console.log("✅ 已应用预设: 快速书写");
-				break;
+		const presets: Record<string, Partial<WriteAdvanced>> = {
+			fast: { strokeSpeed: 500, speedMultiplier: 1.5, pointDensity: 12, useSpeedEasing: false },
+			slow: { strokeSpeed: 150, speedMultiplier: 0.8, pointDensity: 4, useSpeedEasing: true },
+			detailed: { pointDensity: 3, minPointDistance: 1, maxPointDistance: 8, adaptivePointDensity: true },
+			smooth: { pointDensity: 10, minPointDistance: 5, maxPointDistance: 20, adaptivePointDensity: false },
+			calligraphy: {
+				minStrokeWidth: 3,
+				maxStrokeWidth: 12,
+				useVariableWidth: true,
+				startStrokeRatio: 0.2,
+				endStrokeRatio: 0.25,
+				startSpeedRatio: 0.2,
+				endSpeedRatio: 0.3,
+				useSpeedEasing: true,
+			},
+			marker: { minStrokeWidth: 5, maxStrokeWidth: 6, useVariableWidth: false, strokeSpeed: 400, useSpeedEasing: false },
+		};
 
-			case "slow": // 慢速书写
-				this.strokeSpeed = 150;
-				this.speedMultiplier = 0.8;
-				this.pointDensity = 4;
-				this.useSpeedEasing = true;
-				console.log("✅ 已应用预设: 慢速书写");
-				break;
-
-			case "detailed": // 高细节
-				this.pointDensity = 3;
-				this.minPointDistance = 1;
-				this.maxPointDistance = 8;
-				this.adaptivePointDensity = true;
-				console.log("✅ 已应用预设: 高细节");
-				break;
-
-			case "smooth": // 流畅
-				this.pointDensity = 10;
-				this.minPointDistance = 5;
-				this.maxPointDistance = 20;
-				this.adaptivePointDensity = false;
-				console.log("✅ 已应用预设: 流畅");
-				break;
-
-			case "calligraphy": // 书法风格
-				this.minStrokeWidth = 3;
-				this.maxStrokeWidth = 12;
-				this.useVariableWidth = true;
-				this.startStrokeRatio = 0.2;
-				this.endStrokeRatio = 0.25;
-				this.startSpeedRatio = 0.2;
-				this.endSpeedRatio = 0.3;
-				this.useSpeedEasing = true;
-				console.log("✅ 已应用预设: 书法风格");
-				break;
-
-			case "marker": // 马克笔风格
-				this.minStrokeWidth = 5;
-				this.maxStrokeWidth = 6;
-				this.useVariableWidth = false;
-				this.strokeSpeed = 400;
-				this.useSpeedEasing = false;
-				console.log("✅ 已应用预设: 马克笔风格");
-				break;
-
-			default:
-				console.warn(`⚠️ 未知预设: ${presetName}`);
-				console.log("可用预设: fast, slow, detailed, smooth, calligraphy, marker");
+		if (presets[presetName]) {
+			Object.assign(this, presets[presetName]);
+			this.printConfig();
 		}
-
-		this.printConfig();
 	}
 
-	/**
-	 * 计算预估的总时长和点数
-	 */
+	/** 计算预估的总时长和点数 */
 	estimatePerformance() {
-		if (!this.charData) {
-			console.warn("⚠️ 尚未加载汉字数据");
-			return;
-		}
+		if (!this.charData) return;
 
-		let totalLength = 0;
-		let totalPoints = 0;
-
-		for (let i = 0; i < this.charData.strokes.length; i++) {
-			const medians = this.charData.medians[i];
-			const strokeLength = this.calculateMediansLength(medians);
-			totalLength += strokeLength;
-
-			// 估算点数
-			const estimatedPoints = Math.ceil(strokeLength / this.pointDensity);
-			totalPoints += estimatedPoints;
-		}
+		let totalLength = 0,
+			totalPoints = 0;
+		this.charData.medians.forEach((m: number[][]) => {
+			const len = this.calculateMediansLength(m);
+			totalLength += len;
+			totalPoints += Math.ceil(len / this.pointDensity);
+		});
 
 		const baseSpeed = this.strokeSpeed * this.speedMultiplier;
 		const avgSpeedRatio = this.useSpeedEasing
 			? this.startSpeedRatio * this.startStrokeRatio + 1.0 * (1 - this.startStrokeRatio - this.endStrokeRatio) + this.endSpeedRatio * this.endStrokeRatio
 			: 1.0;
-
 		const totalDuration = totalLength / (baseSpeed * avgSpeedRatio);
 		const totalWithDelay = totalDuration + this.strokeDelay * (this.charData.strokes.length - 1);
 
-		console.log("\n📊 ===== 性能预估 =====");
-		console.log(`总笔画数: ${this.charData.strokes.length} 笔`);
-		console.log(`总路径长度: ${totalLength.toFixed(0)} px`);
-		console.log(`预计总点数: ${totalPoints} 点`);
-		console.log(`书写时长: ${totalDuration.toFixed(2)} 秒`);
-		console.log(`含间隔时长: ${totalWithDelay.toFixed(2)} 秒`);
-		console.log(`平均点数/笔: ${(totalPoints / this.charData.strokes.length).toFixed(0)} 点`);
-		console.log("====================\n");
+		console.log(`📊 ${this.charData.strokes.length}笔 ${totalPoints}点 ${totalDuration.toFixed(1)}s (含间隔${totalWithDelay.toFixed(1)}s)`);
 	}
 }
