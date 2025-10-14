@@ -35,6 +35,7 @@ assets/
 1. 确保已安装 Cocos Creator
 2. 下载并配置字库数据（见上方说明）
 3. 使用 Cocos Creator 打开本项目
+3.1 在编辑器的 WriteAdvanced 组件中勾选 Quiz Mode 可以启动手写练习模式
 4. 运行场景 `assets/main.scene`
 
 ## 许可证
