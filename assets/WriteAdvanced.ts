@@ -31,7 +31,7 @@ export class WriteAdvanced extends WriteBase {
 		}
 
 		// 如果启用 Quiz 模式，设置触摸监听
-		if (this.quizMode && this.touchNode) {
+		if (this.touchNode) {
 			this.addEvent();
 		}
 	}
@@ -103,6 +103,7 @@ export class WriteAdvanced extends WriteBase {
 	}
 
 	reset(event?: EventTouch, quizMode: boolean = true) {
+		this.isDrawing = false;
 		this.quizMode = quizMode;
 		this.strokeHistory = [];
 		this.bounds = null;
@@ -126,6 +127,7 @@ export class WriteAdvanced extends WriteBase {
 
 	/** 触摸开始 */
 	onTouchStart(event: EventTouch) {
+		if (!this.quizMode) return;
 		if (this.isDrawing) return;
 		if (!this.quizActive || !this.charData) return;
 
@@ -274,7 +276,6 @@ export class WriteAdvanced extends WriteBase {
 	autoWrite() {
 		this.currentStrokeProgress = 0;
 		this.isAuto = false;
-		this.isDrawing = false;
 		this.pointIndex = 0;
 		this.strokePoints = [];
 		this.reset(null, false);
