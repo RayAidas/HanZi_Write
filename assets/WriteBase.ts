@@ -47,8 +47,8 @@ export class WriteBase extends Component {
 
 	// ==================== Quiz 模式参数 ====================
 
-	@property({ tooltip: "启用 Quiz 模式（书写检测）" })
-	quizMode: boolean = false;
+	// @property({ tooltip: "启用 Quiz 模式（书写检测）" })
+	quizMode: boolean = true;
 
 	@property({
 		tooltip: "Quiz 宽松度（0-2，越大越宽松）",
@@ -815,8 +815,9 @@ export class WriteBase extends Component {
 	}
 
 	update(dt: number) {
-		if (this.quizMode) return;
 		if (!this.isAuto) return;
+		if (!this.strokeGraphics[this.currentStrokeIndex]) return;
+		if (this.currentStrokeProgress == -1) return;
 		this.currentStrokeProgress += dt / this.currentStrokeDuration;
 		if (this.currentStrokeProgress >= 1.0) {
 			this.currentStrokeProgress = 1.0;

@@ -63,6 +63,8 @@ export class WriteAdvanced extends WriteBase {
 	}
 
 	setChar() {
+		this.unscheduleAllCallbacks();
+		this.currentStrokeProgress = -1;
 		let str = this.input.string[0] || this.char;
 		this.strokeHistory = [];
 		this.loadCharData(str, () => {
@@ -103,6 +105,10 @@ export class WriteAdvanced extends WriteBase {
 	}
 
 	reset(event?: EventTouch, quizMode: boolean = true) {
+		this.currentStrokeIndex = 0;
+		this.currentStrokeProgress = -1;
+		this.pointIndex = 0;
+		this.strokePoints = [];
 		this.isDrawing = false;
 		this.quizMode = quizMode;
 		this.strokeHistory = [];
@@ -112,6 +118,7 @@ export class WriteAdvanced extends WriteBase {
 		this.strokesNode.removeAllChildren();
 		this.strokeGraphics = {};
 		this.setChar();
+		this.unscheduleAllCallbacks();
 	}
 
 	/** 开始 Quiz 模式 */
@@ -274,10 +281,6 @@ export class WriteAdvanced extends WriteBase {
 	}
 
 	autoWrite() {
-		this.currentStrokeProgress = 0;
-		this.isAuto = false;
-		this.pointIndex = 0;
-		this.strokePoints = [];
 		this.reset(null, false);
 	}
 }

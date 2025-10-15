@@ -3222,7 +3222,6 @@
     "maxPointDistance": 10,
     "minStrokeWidth": 10,
     "maxStrokeWidth": 50,
-    "quizMode": true,
     "quizLeniency": 1,
     "startEndThreshold": 250,
     "frechetThreshold": 0.45,
